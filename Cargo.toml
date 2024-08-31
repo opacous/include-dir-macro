@@ -13,6 +13,7 @@ quote = "0.3"
 
 rocket = { version = "0.4", optional = true }
 tree_magic = { version = "0.2", optional = true }
+include-flate = "0.3.0"
 
 [features]
 web = ["rocket", "tree_magic"]
@@ -27,4 +28,9 @@ edition = "2018"
 
 [[example]]
 name = "poems"
+edition = "2018"
+
+
+[[example]]
+name = "poems_flate"
 edition = "2018"

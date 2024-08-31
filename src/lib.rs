@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::str;
 use proc_macro::TokenStream;
 
-use syn::{Lit, StrStyle, Token, TokenTree, parse_token_trees};
+use syn::{Lit, StrStyle, Token, TokenTree, parse_token_trees, Ident};
 
 
 #[proc_macro]
@@ -19,6 +19,13 @@ pub fn include_dir(input: TokenStream) -> TokenStream {
     gen.parse().unwrap()
 }
 
+#[proc_macro]
+pub fn include_dir_flate(input: TokenStream) -> TokenStream {
+    let foo = input.to_string();
+    let args = parse_token_trees(&foo).unwrap();
+    let gen = impl_include_dir_flate(args).unwrap();
+    gen.parse().unwrap()
+}
 
 fn get_files<P: AsRef<Path>>(dir: P) -> Vec<PathBuf> {
     let mut files = vec![];
@@ -43,6 +50,12 @@ fn path_to_str_literal<P: AsRef<Path>>(path: P) -> Token {
     Token::Literal(Lit::Str(
         path.as_ref().to_str().unwrap().to_owned(),
         StrStyle::Cooked,
+    ))
+}
+
+fn path_to_name<P: AsRef<Path>>(path: P) -> Token {
+    Token::Ident(Ident::new(
+        path.as_ref().to_str().unwrap().to_ascii_uppercase().chars().filter(|c|c.is_alphanumeric()).collect::<String>(),
     ))
 }
 
@@ -81,6 +94,43 @@ fn impl_include_dir(args: Vec<TokenTree>) -> Result<quote::Tokens, &'static str>
         {
             let mut __include_dir_hashmap = ::std::collections::HashMap::new();
             #( __include_dir_hashmap.insert(::std::path::Path::new(#keys), &include_bytes!(#vals)[..]); )*
+            __include_dir_hashmap
+        }
+    })
+}
+
+
+fn impl_include_dir_flate(args: Vec<TokenTree>) -> Result<quote::Tokens, &'static str> {
+    let dir = get_path_from_args(args)?;
+    let paths: Vec<_> = get_files(&dir);
+
+    let keys: Vec<_> = paths
+        .iter()
+        .map(|path| path.strip_prefix(&dir).unwrap())
+        .map(path_to_str_literal)
+        .collect();
+
+    let names: Vec<_> = paths
+        .iter()
+        .map(|path| path.strip_prefix(&dir).unwrap())
+        .map(path_to_name)
+        .collect();
+
+    let names_ref = names.clone();
+
+    let vals: Vec<_> = paths
+        .iter()
+        .map(path_to_str_literal)
+        .collect();
+
+    Ok(quote! {
+        {
+            use include_flate::flate;
+            let mut __include_dir_hashmap = ::std::collections::HashMap::new();
+            #(
+                flate!(pub static #names: [u8] from #vals);
+                __include_dir_hashmap.insert(#keys, &*#names_ref);
+            )*
             __include_dir_hashmap
         }
     })
